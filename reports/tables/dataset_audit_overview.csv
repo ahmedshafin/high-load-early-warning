@@ -1,0 +1,4 @@
+﻿dataset,source_file,file_size_mb,rows,columns,hosts_count,hosts,timestamp_valid_rows,timestamp_invalid_or_missing_rows,host_missing_rows,label_missing_or_non_numeric_rows,duplicate_full_rows,duplicate_host_timestamp_rows,timestamp_start_utc,timestamp_end_utc,unique_label_values
+D1,dataset_01_TC31_05062025_labeled_final.csv,73.625,227838,104,9,r1;r2;r3;r4;r5;r6;r7;r8;r9,227838,0,0,0,0,0,2025-06-02T10:28:56+00:00,2025-06-05T08:48:16+00:00,0;1;2;3;4
+D2,dataset_02_TC31_07062025_labeled_final.csv,68.428,199548,104,9,r1;r2;r3;r4;r5;r6;r7;r8;r9,199548,0,0,0,0,0,2025-06-05T08:53:26+00:00,2025-06-07T22:28:46+00:00,0;1;2;3;4
+D3,dataset_03_TC31_10062025_labeled_final.csv,67.486,202445,104,9,r1;r2;r3;r4;r5;r6;r7;r8;r9,202445,0,0,0,0,0,2025-06-07T22:43:07+00:00,2025-06-10T13:12:07+00:00,0;1;2;3;4
