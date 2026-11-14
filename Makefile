@@ -16,7 +16,7 @@ all: clean-data features validate eda baseline
 clean-data:
 	$(PY) src/01_clean.py
 
-features: 
+features:
 	$(PY) src/02_build_features.py
 
 validate:
