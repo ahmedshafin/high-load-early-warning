@@ -48,6 +48,9 @@ Same information as the raw file with: columns renamed (`bw_rx.3` -> `bw_rx_3`, 
 |---|---|
 | `y_cls_h{H}` | LABEL at t + H |
 | `y_ge3_h{H}`, `y_ge4_h{H}` | 1 if LABEL at t + H >= 3 / >= 4 |
+| `y_onset_h{H}` | Primary event-onset target: 1 if a confirmed non-4 -> LABEL 4 transition occurs in (t, t+H]; 0 if the full horizon is continuously observed and no onset occurs; -1 if the current row is already LABEL 4 or the full horizon is not continuously observed. Exclude -1 rows when training/evaluating the event-onset task. |
+
+The event-onset target is distinct from the future-state target. It detects the start of a new LABEL 4 episode, not simply whether LABEL is 4 at the exact future timestamp. An onset is confirmed only when the preceding observation for the same host is exactly one nominal sampling interval earlier and has LABEL != 4. The horizon includes the endpoint t+H. The -1 sentinel denotes an ineligible or unobservable target, not a negative class.
 
 **Features (63, all computed from samples at or before t, or from other routers at the same t)**
 

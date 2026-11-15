@@ -1,0 +1,5 @@
+target,horizon_seconds,train_dataset,validation_dataset,rf_n_estimators,rf_max_depth,rf_min_samples_leaf,rf_class_weight,rf_max_features,rf_random_state,n_jobs,selected_probability_threshold,threshold_selection_metric,n_train,n_validation,fit_seconds,validation_precision,validation_recall,validation_f1,validation_fpr,validation_pr_auc_average_precision
+y_onset_h10,10,D1,D1,300,20,10,balanced,sqrt,42,-1,0.695,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,6.329,0.6628,0.7736,0.7139,0.0153,0.796
+y_onset_h20,20,D1,D1,300,20,10,balanced,sqrt,42,-1,0.695,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,8.124,0.6754,0.7441,0.7081,0.0254,0.7663
+y_onset_h30,30,D1,D1,300,20,10,balanced,sqrt,42,-1,0.6386075008898012,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,8.897,0.648,0.7,0.673,0.0384,0.7213
+y_onset_h60,60,D1,D1,300,20,10,balanced,sqrt,42,-1,0.605,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,10.023,0.5996,0.52,0.557,0.0657,0.6081

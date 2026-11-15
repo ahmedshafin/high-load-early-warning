@@ -1,0 +1,13 @@
+model,target,horizon_seconds,train_dataset,validation_dataset,test_dataset,experiment,test_definition,model_C,class_weight,selected_probability_threshold,n_features,n_eligible,positive_prevalence_pct,precision,recall,f1,false_positive_rate,pr_auc_average_precision,roc_auc,tn,fp,fn,tp,predicted_warning_rows
+LogisticRegression,y_onset_h10,10,D1,D1,D1,same_scenario,chronological_test_split,1.0,balanced,0.83,56,20293,3.2573,0.3785,0.7095,0.4937,0.0392,0.5191,0.9623,18862,770,192,469,1239
+LogisticRegression,y_onset_h10,10,D1,D1,D2,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.83,56,102103,10.1476,0.432,0.6963,0.5331,0.1034,0.5706,0.9025,82255,9487,3147,7214,16701
+LogisticRegression,y_onset_h10,10,D1,D1,D3,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.83,56,171476,2.4726,0.2792,0.6215,0.3853,0.0407,0.3365,0.9444,160433,6803,1605,2635,9438
+LogisticRegression,y_onset_h20,20,D1,D1,D1,same_scenario,chronological_test_split,1.0,balanced,0.7899999999999999,56,20293,5.9035,0.3654,0.5484,0.4386,0.0598,0.3945,0.8842,17954,1141,541,657,1798
+LogisticRegression,y_onset_h20,20,D1,D1,D2,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.7899999999999999,56,102103,17.4716,0.4929,0.5687,0.5281,0.1238,0.5236,0.8342,73828,10436,7694,10145,20581
+LogisticRegression,y_onset_h20,20,D1,D1,D3,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.7899999999999999,56,171476,4.6018,0.3205,0.5407,0.4025,0.0553,0.3221,0.8737,154538,9047,3624,4267,13314
+LogisticRegression,y_onset_h30,30,D1,D1,D1,same_scenario,chronological_test_split,1.0,balanced,0.7499999999999999,56,20293,8.2935,0.3673,0.4837,0.4175,0.0753,0.3705,0.8287,17208,1402,869,814,2216
+LogisticRegression,y_onset_h30,30,D1,D1,D2,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.7499999999999999,56,102103,23.4019,0.5512,0.5617,0.5564,0.1397,0.5664,0.8133,67282,10927,10472,13422,24349
+LogisticRegression,y_onset_h30,30,D1,D1,D3,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.7499999999999999,56,171476,6.4003,0.3089,0.5233,0.3885,0.08,0.3146,0.8258,147655,12846,5232,5743,18589
+LogisticRegression,y_onset_h60,60,D1,D1,D1,same_scenario,chronological_test_split,1.0,balanced,0.632333336725577,56,20293,14.6159,0.3351,0.4181,0.372,0.142,0.3525,0.7252,14867,2460,1726,1240,3700
+LogisticRegression,y_onset_h60,60,D1,D1,D2,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.632333336725577,56,102103,36.4328,0.6541,0.5385,0.5907,0.1633,0.6537,0.7616,54308,10596,17166,20033,30629
+LogisticRegression,y_onset_h60,60,D1,D1,D3,cross_scenario,all_non_purge_rows_in_scenario,1.0,balanced,0.632333336725577,56,171476,10.8342,0.2496,0.5121,0.3356,0.1871,0.2861,0.7239,124292,28606,9065,9513,38119

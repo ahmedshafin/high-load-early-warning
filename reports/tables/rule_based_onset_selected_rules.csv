@@ -1,0 +1,5 @@
+target,horizon_seconds,tuning_dataset,selected_bw_threshold_mbps,selected_rise_threshold_mbps_per_10s,trend_clause_enabled,validation_n,validation_prevalence_pct,validation_precision,validation_recall,validation_f1,validation_fpr
+y_onset_h10,10,D1,85.0,24.8,True,19832,3.7414,0.3133,0.527,0.393,0.0449
+y_onset_h20,20,D1,80.0,24.8,True,19832,6.6408,0.3941,0.5285,0.4515,0.0578
+y_onset_h30,30,D1,80.0,24.8,True,19832,9.1771,0.4655,0.4516,0.4584,0.0524
+y_onset_h60,60,D1,80.0,24.8,True,19832,15.9036,0.5255,0.2942,0.3772,0.0502

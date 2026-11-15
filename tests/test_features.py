@@ -1,10 +1,10 @@
-"""Unit tests on small synthetic data - they run in CI without the real datasets."""
+"""Unit tests for the original pipeline and new event-onset targets."""
 import numpy as np
 import pandas as pd
 
 from common import label_from_bw, run_lengths
 from config import HORIZONS_SEC, SAMPLING_SEC
-from features import build, feature_groups
+from features import build, feature_groups, add_event_onset_targets
 
 T0 = 1_748_860_136
 
@@ -61,7 +61,55 @@ def test_targets_equal_future_label():
         ok = out[f"y_cls_h{H}"].notna()
         key = pd.MultiIndex.from_arrays([out.loc[ok, "host"], out.loc[ok, "ts_unix"] + H])
         assert (lk.reindex(key).values == out.loc[ok, f"y_cls_h{H}"].values).all()
-        assert (out.loc[ok, "y_ge4_h%d" % H] == (out.loc[ok, f"y_cls_h{H}"] >= 4)).all()
+        assert (out.loc[ok, "y_ge4_h{H}".format(H=H)] == (out.loc[ok, f"y_cls_h{H}"] >= 4)).all()
+
+
+def test_build_includes_event_onset_targets_and_preserves_future_state_targets():
+    out = build(make_clean(n=120), drop_idle_tail=False)
+    for H in HORIZONS_SEC:
+        onset_col = f"y_onset_h{H}"
+        assert onset_col in out.columns
+        assert set(out[onset_col].unique()).issubset({-1, 0, 1})
+        assert (out.loc[out["label"] == 4, onset_col] == -1).all()
+        assert f"y_cls_h{H}" in out.columns
+        assert f"y_ge4_h{H}" in out.columns
+
+
+def test_event_onset_targets_use_new_transition_not_current_state():
+    labels = [0, 0, 4, 4, 0, 0, 0, 4, 4, 0]
+    df = pd.DataFrame({"host": "r1", "ts_unix": T0 + SAMPLING_SEC * np.arange(len(labels)),
+                       "label": labels})
+    out = add_event_onset_targets(df)
+
+    assert out["y_onset_h10"].tolist() == [0, 1, -1, -1, 0, 0, 1, -1, -1, -1]
+    assert out["y_onset_h20"].tolist() == [1, 1, -1, -1, 0, 1, 1, -1, -1, -1]
+
+
+def test_event_onset_targets_mark_incomplete_or_gapped_horizons_unknown():
+    # There is a 20-second gap between observations at t=10 and t=30.
+    labels = [0, 0, 4, 0, 0, 4]
+    timestamps = T0 + np.array([0, 10, 30, 40, 50, 60])
+    df = pd.DataFrame({"host": "r1", "ts_unix": timestamps, "label": labels})
+    out = add_event_onset_targets(df)
+
+    # t=10 cannot be labelled because its next expected observation at t=20 is absent.
+    assert out.loc[1, "y_onset_h10"] == -1
+    # After the gap, a normal non-4 -> 4 transition is still a confirmed onset.
+    assert out.loc[4, "y_onset_h10"] == 1
+    # Current LABEL 4 and the final incomplete horizon are unknown/ineligible.
+    assert out.loc[2, "y_onset_h10"] == -1
+    assert out.loc[5, "y_onset_h10"] == -1
+
+
+def test_event_onset_targets_are_host_specific():
+    ts = T0 + SAMPLING_SEC * np.arange(5)
+    df = pd.concat([
+        pd.DataFrame({"host": "r1", "ts_unix": ts, "label": [0, 0, 4, 4, 0]}),
+        pd.DataFrame({"host": "r2", "ts_unix": ts, "label": [0, 0, 0, 0, 0]}),
+    ], ignore_index=True)
+    out = add_event_onset_targets(df)
+    assert out.loc[(out.host == "r1") & (out.ts_unix == ts[1]), "y_onset_h10"].iloc[0] == 1
+    assert out.loc[(out.host == "r2") & (out.ts_unix == ts[1]), "y_onset_h10"].iloc[0] == 0
 
 
 def test_split_has_purge_gap():
@@ -78,5 +126,5 @@ def test_idle_tail_removed_but_targets_use_it():
     clean.loc[clean.ts_unix > last - SAMPLING_SEC * 100, "idle_tail"] = 1
     out = build(clean, drop_idle_tail=True)
     assert out.ts_unix.max() <= last - SAMPLING_SEC * 100
-    # rows right before the tail still get a defined target (computed on the full series)
+    # Rows right before the tail still get a defined future-state target (computed on full series).
     assert out.loc[out.ts_unix == out.ts_unix.max(), "y_cls_h60"].notna().all()

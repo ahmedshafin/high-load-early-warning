@@ -29,3 +29,6 @@ instagram_cookies.txt
 *.key
 credentials.json
 secrets/
+
+reports/tables/logistic_regression_onset_predictions.csv
+reports/tables/random_forest_onset_predictions.csv

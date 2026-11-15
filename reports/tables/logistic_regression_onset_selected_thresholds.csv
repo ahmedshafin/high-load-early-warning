@@ -1,0 +1,5 @@
+target,horizon_seconds,train_dataset,validation_dataset,model_C,class_weight,selected_probability_threshold,threshold_selection_metric,n_train,n_validation,validation_precision,validation_recall,validation_f1,validation_fpr,validation_pr_auc_average_precision
+y_onset_h10,10,D1,D1,1.0,balanced,0.83,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,0.4461,0.7197,0.5508,0.0347,0.5831
+y_onset_h20,20,D1,D1,1.0,balanced,0.7899999999999999,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,0.4257,0.5877,0.4938,0.0564,0.4815
+y_onset_h30,30,D1,D1,1.0,balanced,0.7499999999999999,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,0.4285,0.5335,0.4753,0.0719,0.4501
+y_onset_h60,60,D1,D1,1.0,balanced,0.632333336725577,"validation_F1; ties lower FPR, higher precision, fewer alerts",93832,19832,0.3751,0.4321,0.4016,0.1362,0.3844

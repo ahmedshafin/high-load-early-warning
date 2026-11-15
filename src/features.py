@@ -1,9 +1,18 @@
 """
-Feature + target construction (importable, so the leakage test can re-use it).
+Feature + target construction for the early-warning pipeline.
 
-Every feature at row (host, t) is computed ONLY from samples with time <= t
-(current sample, lags, trailing windows) or from other routers at the SAME time t.
-Targets look strictly forward: label at t+H of the same router.
+Features at row (host, t) use only samples with time <= t (current sample,
+lags, trailing windows) or other routers at the SAME timestamp.
+
+Two target formulations are retained:
+1. Future-state targets: LABEL at t+H (original project formulation).
+2. Event-onset targets: whether a NEW, observed non-LABEL-4 -> LABEL-4
+   transition occurs in (t, t+H] (improved outline's primary task).
+
+For event-onset targets, -1 means ineligible/unknown: the current row is
+already LABEL 4, or the complete future horizon is not continuously observed
+at the expected sampling interval. Model training/evaluation must filter out
+rows with y_onset_h{H} == -1.
 """
 import numpy as np
 import pandas as pd
@@ -49,7 +58,7 @@ def add_current_aggregates(df):
     df["discards_in_sum"] = _sum(df, "ifInDiscards")
     df["discards_out_sum"] = _sum(df, "ifOutDiscards")
     df["discards_sum"] = df["discards_in_sum"] + df["discards_out_sum"]
-    # error-like RMON counters (Jabbers is excluded: in these files it behaves like a packet counter)
+    # Error-like RMON counters (Jabbers is excluded: in these files it behaves like a packet counter).
     err = ["etherStatsCRCAlignErrors", "etherStatsUndersizePkts", "etherStatsOversizePkts",
            "etherStatsFragments", "etherStatsCollisions"]
     df["rmon_err_sum"] = sum(_sum(df, e) for e in err)
@@ -78,7 +87,7 @@ def add_temporal_features(df):
         out[f"n_ge4_last{s}s"] = g["cur_ge4"].rolling(w, min_periods=w).sum().reset_index(level=0, drop=True)
     df = pd.concat([df, pd.DataFrame(out, index=df.index)], axis=1)
 
-    # time-in-state features for LABEL>=3 and >=4
+    # Time-in-state features for LABEL>=3 and >=4.
     run3 = np.zeros(len(df), dtype=np.int32); since3 = run3.copy()
     run4 = run3.copy(); since4 = run3.copy()
     for _, idx in df.groupby("host", observed=True, sort=False).indices.items():
@@ -105,21 +114,103 @@ def add_network_context(df):
     return df.merge(ctx, left_on="ts_unix", right_index=True, how="left")
 
 
+def add_event_onset_targets(df):
+    """Add y_onset_h{H} targets for new LABEL=4 event onsets.
+
+    Target definition for a row at time t:
+      * 1: current label is not 4 and a confirmed non-4 -> 4 transition occurs
+           at one of the next k observations, where H = k * SAMPLING_SEC.
+      * 0: current label is not 4, the full future horizon is observed at
+           exactly SAMPLING_SEC intervals, and no confirmed onset occurs.
+      * -1: current label is already 4, or the complete horizon is not
+           continuously observed (there is insufficient evidence to label it).
+
+    An onset is confirmed only when the preceding sample for the same host is
+    exactly one sampling interval earlier and has label != 4. This excludes
+    left-censored first observations and transitions across timestamp gaps.
+    The future window is (t, t+H], so an onset at exactly t+H counts as 1.
+    """
+    required = {"host", "ts_unix", "label"}
+    missing = required.difference(df.columns)
+    if missing:
+        raise KeyError(f"add_event_onset_targets requires columns: {sorted(missing)}")
+
+    labels_all = pd.to_numeric(df["label"], errors="coerce").to_numpy()
+    ts_all = pd.to_numeric(df["ts_unix"], errors="coerce").to_numpy(dtype="float64")
+    targets = {H: np.full(len(df), -1, dtype=np.int8) for H in HORIZONS_SEC}
+
+    for _, idx in df.groupby("host", observed=True, sort=False).indices.items():
+        idx = np.asarray(idx, dtype=np.int64)
+        labels = labels_all[idx]
+        ts = ts_all[idx]
+        n = len(idx)
+        if n == 0:
+            continue
+
+        # interval_ok[j] describes the transition from row j to row j+1.
+        interval_ok = np.diff(ts) == SAMPLING_SEC
+
+        # An onset can only be confirmed when its preceding sample is adjacent
+        # in time and explicitly has a non-4 label.
+        onset = np.zeros(n, dtype=np.int8)
+        if n > 1:
+            onset[1:] = (
+                (labels[1:] == 4)
+                & (labels[:-1] != 4)
+                & interval_ok
+            ).astype(np.int8)
+
+        # Prefix sums allow efficient horizon-window checks.
+        onset_prefix = np.concatenate(([0], np.cumsum(onset, dtype=np.int64)))
+        bad_interval_prefix = np.concatenate(([0], np.cumsum(~interval_ok, dtype=np.int64)))
+
+        for H in HORIZONS_SEC:
+            if H % SAMPLING_SEC != 0:
+                raise ValueError(f"Horizon {H} is not divisible by SAMPLING_SEC={SAMPLING_SEC}")
+            k = H // SAMPLING_SEC
+            if k <= 0 or n <= k:
+                continue
+
+            # Candidate starting rows have a complete k-step future window.
+            starts = np.arange(0, n - k)
+            # All k intervals from t to t+H must be exactly the nominal interval.
+            continuous = (bad_interval_prefix[starts + k] - bad_interval_prefix[starts]) == 0
+            eligible = labels[starts] != 4
+            valid = continuous & eligible
+            valid_starts = starts[valid]
+            if valid_starts.size == 0:
+                continue
+
+            # Count confirmed onsets among positions i+1 ... i+k (inclusive).
+            positive = (onset_prefix[valid_starts + k + 1] -
+                        onset_prefix[valid_starts + 1]) > 0
+            host_target = targets[H]
+            host_target[idx[valid_starts]] = positive.astype(np.int8)
+
+    for H, values in targets.items():
+        df[f"y_onset_h{H}"] = values
+    return df
+
+
 def add_targets(df):
+    """Add the original future-state targets and the new event-onset targets."""
     g = df.groupby("host", observed=True, sort=False)
     for H in HORIZONS_SEC:
         k = H // SAMPLING_SEC
         fut_label = g["label"].shift(-k)
-        ok = (g["ts_unix"].shift(-k) - df["ts_unix"]) == H          # guards against gaps
+        ok = (g["ts_unix"].shift(-k) - df["ts_unix"]) == H  # guards against gaps
         fut_label = fut_label.where(ok)
         df[f"y_cls_h{H}"] = fut_label
         for thr in THRESHOLDS:
             df[f"y_ge{thr}_h{H}"] = (fut_label >= thr).astype("float").where(fut_label.notna())
+
+    # Keep the original future-state targets unchanged; add the new primary task.
+    df = add_event_onset_targets(df)
     return df
 
 
 def add_split(df, purge_sec=max(HORIZONS_SEC)):
-    """Chronological train/val/test inside ONE dataset, with a purge band so that
+    """Chronological train/val/test inside ONE dataset, with purge band so that
     no training target window reaches into the validation/test period."""
     ts_u = np.sort(df["ts_unix"].unique())
     t1 = ts_u[int(len(ts_u) * SPLIT_FRACS[0])]
@@ -134,11 +225,12 @@ def add_split(df, purge_sec=max(HORIZONS_SEC)):
 
 
 def build(df, drop_idle_tail=DROP_IDLE_TAIL):
-    """clean dataframe (one dataset) -> model-ready dataframe.
+    """Clean dataframe (one dataset) -> model-ready dataframe.
 
-    Features/targets are computed on the FULL series first (so the last active rows still get
-    correct targets); the idle tail is removed afterwards and the chronological split is defined
-    on the remaining active period only."""
+    Features/targets are computed on the FULL series first (so the last active
+    rows still get correct targets); the idle tail is removed afterwards and
+    the chronological split is defined on the remaining active period only.
+    """
     df = df.sort_values(["host", "ts_unix"]).reset_index(drop=True)
     df = add_current_aggregates(df)
     df = add_temporal_features(df)
@@ -168,7 +260,7 @@ def feature_groups(df):
         "network_context": [c for c in df.columns if c.startswith("ctx_")],
         "meta_flags": ["has_if6", "any_imputed", "n_imputed"],
     }
-    # bw_max appears in two patterns above; keep unique ordering
+    # Keep unique ordering.
     seen = set()
     for k, v in groups.items():
         groups[k] = [c for c in v if not (c in seen or seen.add(c))]
