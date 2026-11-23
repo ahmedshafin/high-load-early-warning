@@ -1,34 +1,45 @@
-# --- Python
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.ipynb_checkpoints/
+# --- Python environment and caches ---
 .venv/
 venv/
+env/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ipynb_checkpoints/
 *.egg-info/
 
-# --- Data: raw inputs and generated tables are NOT versioned (size). See data/README.md
+# --- Editor and OS files ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# --- Secrets (never commit these) ---
+.env
+*.key
+*.pem
+*cookies*.txt
+
+# --- Data: large and regenerable (keep folder placeholders and the small sample) ---
 data/raw/*
 data/clean/*
 data/model_ready/*
 !data/raw/.gitkeep
 !data/clean/.gitkeep
 !data/model_ready/.gitkeep
+!data/README.md
+!data/sample/
 
-# --- OS / editor
-.DS_Store
-.idea/
-.vscode/
-instagram_cookies.txt
+# --- Generated model outputs: large, rebuilt by the pipeline ---
+reports/tables/*_predictions.csv
+reports/tables/*_val_predictions.csv
+reports/tables/*_test_predictions.parquet
+reports/tables/*_alert_episodes.csv
+reports/tables/*_event_level_events.csv
 
-# Secrets and credentials
-.env
-.env.*
-!.env.example
-*.pem
-*.key
-credentials.json
-secrets/
-
-reports/tables/logistic_regression_onset_predictions.csv
-reports/tables/random_forest_onset_predictions.csv
+# --- Backups and scratch files ---
+reports/tables_backup/
+structure.txt
+*.log
+*.tmp
+*.bak

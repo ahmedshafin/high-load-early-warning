@@ -20,6 +20,7 @@ Run from the repository root:
 Outputs:
     reports/tables/rule_based_onset_results.csv
     reports/tables/rule_based_onset_selected_rules.csv
+    reports/tables/rule_based_onset_predictions.csv   (row-level warnings, for event-level evaluation)
 """
 from __future__ import annotations
 
@@ -199,6 +200,7 @@ def main() -> None:
     d1 = datasets[TRAIN_DATASET]
     result_rows = []
     selected_rows = []
+    prediction_frames = []
 
     for horizon in HORIZONS_SEC:
         target_col = f"y_onset_h{horizon}"
@@ -237,6 +239,21 @@ def main() -> None:
                 test_definition = "all_non_purge_rows_in_scenario"
 
             metrics = evaluate_split(test, target_col, selected)
+
+            # Save row-level warnings so 11_event_level_evaluation.py can score this rule
+            # exactly like the ML models (same eligible rows as the sample-level metrics).
+            elig = eligible_rows(test, target_col)
+            frame = elig[["dataset", "host", "ts_unix", "time", "label"]].copy()
+            frame["horizon_seconds"] = horizon
+            frame["target_column"] = target_col
+            frame["actual_onset"] = elig[target_col].astype("int8").to_numpy()
+            frame["predicted_probability"] = np.nan          # a rule has no probability
+            frame["predicted_warning"] = predict_rule(
+                elig, selected["bw_threshold"], selected["rise_threshold"])
+            frame["selected_probability_threshold"] = np.nan
+            frame["test_definition"] = test_definition
+            frame["model"] = "RuleBased"
+            prediction_frames.append(frame)
             result_rows.append({
                 "target": target_col,
                 "horizon_seconds": horizon,
@@ -271,6 +288,8 @@ def main() -> None:
     selected_path = TAB_DIR / "rule_based_onset_selected_rules.csv"
     results.to_csv(results_path, index=False)
     selected.to_csv(selected_path, index=False)
+    predictions_path = TAB_DIR / "rule_based_onset_predictions.csv"
+    pd.concat(prediction_frames, ignore_index=True).to_csv(predictions_path, index=False)
 
     print("\nSelected thresholds (chosen using D1 validation only):")
     print(selected[[
@@ -280,6 +299,7 @@ def main() -> None:
     ]].to_string(index=False))
     print(f"\nSaved: {results_path}")
     print(f"Saved: {selected_path}")
+    print(f"Saved: {predictions_path}")
     print("\nRule-based event-onset baseline completed.")
 
 

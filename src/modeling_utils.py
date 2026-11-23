@@ -55,3 +55,24 @@ def scale_fit_on_train(Xtr, *others, log_cols=None):
         X.loc[:, log_cols] = np.log1p(X[log_cols])
     mu, sd = Xtr.mean(), Xtr.std().replace(0, 1)
     return [(X - mu) / sd for X in (Xtr, *others)]
+
+
+def val_prediction_frame(df, target_col, horizon, probs, y_val, model_name, split="val"):
+    """Row-level validation probabilities (same rows/order as the model's validation X, y).
+
+    Saved by the model scripts so 13_fixed_budget_thresholds.py can choose thresholds
+    without retraining anything.
+    """
+    part = df.loc[df["split"].eq(split)]
+    target = pd.to_numeric(part[target_col], errors="coerce")
+    keep = target.isin([0, 1])
+    frame = part.loc[keep, ["dataset", "host", "ts_unix", "time", "label"]].reset_index(drop=True)
+    y_val = np.asarray(y_val)
+    if len(frame) != len(y_val) or not np.array_equal(target.loc[keep].astype("int8").to_numpy(), y_val):
+        raise RuntimeError("Validation metadata does not align with the model's validation rows.")
+    frame["horizon_seconds"] = horizon
+    frame["target_column"] = target_col
+    frame["actual_onset"] = y_val
+    frame["predicted_probability"] = np.asarray(probs, dtype=float)
+    frame["model"] = model_name
+    return frame

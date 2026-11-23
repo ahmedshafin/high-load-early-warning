@@ -1,25 +1,44 @@
-
 """
-Event-level evaluation for Random Forest onset predictions.
+Event-level evaluation of onset-warning predictions (all models).
 
-Uses:
-- random_forest_onset_predictions.csv
-- label4_event_audit.csv
-- model_ready CSV files for monitoring-time exposure
+Usage (from the repository root):
+    python src/11_event_level_evaluation.py                 # every model whose predictions exist
+    python src/11_event_level_evaluation.py --model xgboost # one model only
+
+Reads, per model:
+- reports/tables/<model>_onset_predictions.csv
+- reports/tables/label4_event_audit.csv   (written by 00_dataset_audit.py)
+- data/model_ready/<DS>_model_ready.parquet  (monitoring-time exposure)
+
+Writes, per model:
+- reports/tables/<model>_event_level_summary.csv
+- reports/tables/<model>_event_level_events.csv
+- reports/tables/<model>_alert_episodes.csv
+plus a combined reports/tables/event_level_summary_all_models.csv
 
 No model training is performed.
 """
 
+import argparse
+import sys
 from pathlib import Path
 
 import numpy as np
 import pandas as pd
 
+SRC_DIR = Path(__file__).resolve().parent
+if str(SRC_DIR) not in sys.path:
+    sys.path.insert(0, str(SRC_DIR))
 
-ROOT = Path(__file__).resolve().parents[1]
+from config import MODEL_DIR, TAB_DIR  # noqa: E402  (respects RAW_DIR / OUT_DIR overrides)
 
-TAB_DIR = ROOT / "reports" / "tables"
-MODEL_DIR = ROOT / "data" / "model_ready"
+# key -> (file prefix, display name)
+MODELS = {
+    "rule_based": ("rule_based", "RuleBased"),
+    "logistic_regression": ("logistic_regression", "LogisticRegression"),
+    "random_forest": ("random_forest", "RandomForest"),
+    "xgboost": ("xgboost", "XGBoost"),
+}
 
 DATASETS = ["D1", "D2", "D3"]
 HORIZONS = [10, 20, 30, 60]
@@ -28,10 +47,10 @@ IDLE_ROUTER = "r7"
 SAMPLING_SEC = 10
 
 
-def load_inputs():
-    """Load saved predictions and confirmed LABEL=4 events."""
+def load_inputs(prefix):
+    """Load saved predictions for one model and the confirmed LABEL=4 events."""
 
-    pred_path = TAB_DIR / "random_forest_onset_predictions.csv"
+    pred_path = TAB_DIR / f"{prefix}_onset_predictions.csv"
     event_path = TAB_DIR / "label4_event_audit.csv"
 
     if not pred_path.exists():
@@ -376,16 +395,13 @@ def calculate_monitoring_hours(dataset: str) -> float:
     Exclude gaps larger than the nominal 10-second interval.
     """
 
-    path = MODEL_DIR / f"{dataset}_model_ready.csv.gz"
+    path = MODEL_DIR / f"{dataset}_model_ready.parquet"
 
     if not path.exists():
         raise FileNotFoundError(path)
 
-    df = pd.read_csv(
-        path,
-        compression="gzip",
-        usecols=["host", "ts_unix", "split"],
-    )
+    df = pd.read_parquet(path, columns=["host", "ts_unix", "split"])
+    df["host"] = df["host"].astype(str)
 
     df = df[df["host"] != IDLE_ROUTER].copy()
 
@@ -412,12 +428,14 @@ def calculate_monitoring_hours(dataset: str) -> float:
     return total_seconds / 3600.0
 
 
-def main():
+def run_model(model_key):
 
-    print("\nRANDOM FOREST — EVENT-LEVEL EVALUATION")
+    prefix, display = MODELS[model_key]
+
+    print(f"\n{display.upper()} — EVENT-LEVEL EVALUATION")
     print("=" * 78)
 
-    predictions, all_events = load_inputs()
+    predictions, all_events = load_inputs(prefix)
 
     print("Prediction rows:", len(predictions))
     print("Confirmed actual events:", len(all_events))
@@ -568,8 +586,17 @@ def main():
                 if eligible_count else np.nan
             )
 
+            # Alert burden: share of router-time spent under an active alert. A model that
+            # warns continuously gets few "false alarms" (one never-ending alert) but a
+            # duty cycle near 100 %, so always report it next to the false-alarm rate.
+            active_seconds = (
+                float((alert_df["alert_end_ts"] - alert_df["alert_start_ts"]).sum())
+                if alert_count else 0.0
+            )
+            exposure_seconds = router_hours * 3600.0
+
             summary_rows.append({
-                "model": "RandomForest",
+                "model": display,
                 "dataset": dataset,
                 "horizon_seconds": horizon,
                 "confirmed_events": len(event_eval),
@@ -596,6 +623,14 @@ def main():
                     round(float(lead_times.mean()), 3)
                     if not lead_times.empty else np.nan
                 ),
+                "alert_active_time_pct": (
+                    round(active_seconds / exposure_seconds * 100, 3)
+                    if exposure_seconds > 0 else np.nan
+                ),
+                "oracle_active_time_pct": (
+                    round(eligible_count * horizon / exposure_seconds * 100, 3)
+                    if exposure_seconds > 0 else np.nan
+                ),
             })
 
             event_output_frames.append(event_eval)
@@ -613,6 +648,11 @@ def main():
             print(
                 "False alarms/router-hour:",
                 round(false_alarm_rate, 4)
+            )
+            print(
+                "Time under alert (% of router-time):",
+                round(active_seconds / exposure_seconds * 100, 2)
+                if exposure_seconds > 0 else "N/A",
             )
             print(
                 "Median lead time:",
@@ -636,15 +676,15 @@ def main():
 
     # Save reproducible results.
     summary_path = (
-        TAB_DIR / "random_forest_event_level_summary.csv"
+        TAB_DIR / f"{prefix}_event_level_summary.csv"
     )
 
     events_path = (
-        TAB_DIR / "random_forest_event_level_events.csv"
+        TAB_DIR / f"{prefix}_event_level_events.csv"
     )
 
     alerts_path = (
-        TAB_DIR / "random_forest_alert_episodes.csv"
+        TAB_DIR / f"{prefix}_alert_episodes.csv"
     )
 
     summary.to_csv(summary_path, index=False)
@@ -676,7 +716,34 @@ def main():
     print(events_path)
     print(alerts_path)
 
-    print("\nEvent-level evaluation completed successfully.")
+    print(f"\nEvent-level evaluation completed for {display}.")
+    return summary
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("Usage")[0].strip())
+    parser.add_argument("--model", choices=sorted(MODELS), default=None,
+                        help="evaluate one model (default: every model with a predictions file)")
+    args = parser.parse_args()
+
+    keys = [args.model] if args.model else list(MODELS)
+    summaries = []
+    for key in keys:
+        pred_path = TAB_DIR / f"{MODELS[key][0]}_onset_predictions.csv"
+        if not pred_path.exists():
+            if args.model:
+                raise FileNotFoundError(pred_path)
+            print(f"\n[skip] {MODELS[key][1]}: {pred_path.name} not found")
+            continue
+        summaries.append(run_model(key))
+
+    if not summaries:
+        raise SystemExit("No prediction files found. Run the model scripts (08-10, 12) first.")
+
+    combined = pd.concat(summaries, ignore_index=True)
+    out = TAB_DIR / "event_level_summary_all_models.csv"
+    combined.to_csv(out, index=False)
+    print(f"\nCombined summary: {out}")
 
 
 if __name__ == "__main__":

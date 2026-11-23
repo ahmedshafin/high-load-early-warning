@@ -45,7 +45,7 @@ if str(SRC_DIR) not in sys.path:
 
 from config import HORIZONS_SEC, MODEL_DIR, SEED, TAB_DIR  # noqa: E402
 from features import feature_groups  # noqa: E402
-from modeling_utils import load_model_ready  # noqa: E402
+from modeling_utils import load_model_ready, val_prediction_frame  # noqa: E402
 
 TRAIN_DATASET = "D1"
 TEST_DATASETS = ("D1", "D2", "D3")
@@ -249,6 +249,7 @@ def main() -> None:
     threshold_rows: list[dict] = []
     importance_rows: list[dict] = []
     prediction_frames: list[pd.DataFrame] = []
+    validation_frames: list[pd.DataFrame] = []
     d1 = datasets[TRAIN_DATASET]
 
     for horizon in HORIZONS_SEC:
@@ -271,6 +272,8 @@ def main() -> None:
 
         val_prob = model.predict_proba(X_val_imp)[:, 1]
         threshold, val_metrics = choose_probability_threshold(y_val, val_prob)
+        validation_frames.append(val_prediction_frame(
+            d1, target_col, horizon, val_prob, y_val, "RandomForest"))
         threshold_rows.append({
             "target": target_col,
             "horizon_seconds": horizon,
@@ -416,8 +419,11 @@ def main() -> None:
     thresholds.to_csv(thresholds_path, index=False)
     importances.to_csv(importances_path, index=False)
     predictions.to_csv(predictions_path, index=False)
+    val_path = TAB_DIR / "random_forest_onset_val_predictions.csv"
+    pd.concat(validation_frames, ignore_index=True).to_csv(val_path, index=False)
 
     print(f"Saved: {predictions_path}")
+    print(f"Saved: {val_path}")
 
     print("\nResults summary — F1 by horizon and test scenario:")
     print(results.pivot(index="horizon_seconds", columns="test_dataset", values="f1").round(3).to_string())

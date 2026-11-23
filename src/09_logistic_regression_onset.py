@@ -47,7 +47,7 @@ if str(SRC_DIR) not in sys.path:
 
 from config import HORIZONS_SEC, MODEL_DIR, SEED, TAB_DIR  # noqa: E402
 from features import feature_groups  # noqa: E402
-from modeling_utils import load_model_ready  # noqa: E402
+from modeling_utils import load_model_ready, val_prediction_frame  # noqa: E402
 
 TRAIN_DATASET = "D1"
 TEST_DATASETS = ("D1", "D2", "D3")
@@ -298,6 +298,7 @@ def main() -> None:
     threshold_rows: list[dict] = []
     coefficient_rows: list[dict] = []
     prediction_frames: list[pd.DataFrame] = []
+    validation_frames: list[pd.DataFrame] = []
     d1 = datasets[TRAIN_DATASET]
 
     for horizon in HORIZONS_SEC:
@@ -309,6 +310,11 @@ def main() -> None:
         model, threshold, val_metrics, n_train, n_val = fit_and_tune(
             d1, d1, target_col, feature_cols
         )
+
+        X_val_save, y_val_save = partition_xy(d1, target_col, feature_cols, split="val")
+        validation_frames.append(val_prediction_frame(
+            d1, target_col, horizon, model.predict_proba(X_val_save)[:, 1],
+            y_val_save, "LogisticRegression"))
 
         threshold_rows.append({
             "target": target_col,
@@ -457,8 +463,11 @@ def main() -> None:
     thresholds.to_csv(thresholds_path, index=False)
     coefficients.to_csv(coefficients_path, index=False)
     predictions.to_csv(predictions_path, index=False)
+    val_path = TAB_DIR / "logistic_regression_onset_val_predictions.csv"
+    pd.concat(validation_frames, ignore_index=True).to_csv(val_path, index=False)
 
     print(f"Saved: {predictions_path}")
+    print(f"Saved: {val_path}")
     print("\nSelected thresholds (D1 validation only):")
     print(thresholds[[
         "target", "selected_probability_threshold", "validation_f1", "validation_fpr"
